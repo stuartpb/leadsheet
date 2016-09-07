@@ -1,0 +1,30 @@
+{
+  "name": "leadsheet",
+  "version": "0.0.1",
+  "description": "Get Google Places API data for a list of names, output them to a CSV",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stuartpb/leadsheet.git"
+  },
+  "keywords": [
+    "google",
+    "places"
+  ],
+  "author": "Stuart P. Bentley <stuart@testtrack4.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stuartpb/leadsheet/issues"
+  },
+  "homepage": "https://github.com/stuartpb/leadsheet#readme",
+  "dependencies": {
+    "csv-write-stream": "^2.0.0",
+    "level": "^1.4.0",
+    "request": "^2.74.0",
+    "request-promise-native": "^1.0.3",
+    "then-levelup": "^1.0.1"
+  }
+}
