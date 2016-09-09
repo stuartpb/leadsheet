@@ -1,12 +1,14 @@
 "use strict";
 
-let fs = require('fs');
-let readline = require('readline');
 let querystring = require('querystring');
+let urllib = require('url');
+require('es6-shim');
+require('array-includes').shim();
 let request = require('request-promise-native');
 let levelUp = require('level');
 let thenLevel = require('then-levelup');
-let csvWriteStream = require('csv-write-stream');
+let xlsx = require('xlsx');
+let cheerio = require('cheerio');
 
 function level() {
   let db = levelUp.apply(levelUp, arguments);
@@ -26,88 +28,171 @@ function getFirstGoogleResult(placeName) {
     followRedirect: false
     })
     .then(res => {
+      // If "I'm Feeling Lucky" redirects us, return where
       if (res.statusCode >= 300 && res.statusCode < 400) {
         return res.headers.location;
-      } else {
-        // this is pretty cheap but, honestly, if google isn't confident
-        // enough to redirect to the site, let's just tell them to
-        // google it themselves.
-        // This can probably get replaced with something like the following:
-        /*
-          // #search #ires h3.r > a
-          let firstResultUrl = url.parse(cheerio(res.body)('#ires a').href);
-          // assertEqual(firstResultUrl.path, '/url');
-          return firstUrl.query.q;
-        */
-        // but that's looping cheerio in for 2% of scenarios with data that we
-        // don't even necessarily trust
-        return queryUri;
-      }
+      // If "I'm Feeling Lucky" returns a page of search results
+      } else if (res.statusCode == 200) {
+        // Try to return the destination of the first search result
+        try {
+          // Parse the first link in the result list
+          // A more verbose selector might be '#search #ires h3.r > a'
+          let firstResultUrl =
+            urllib.parse(cheerio('#ires a', res.body).attr('href'));
+          if (firstResultUrl.path != '/url') throw firstResultUrl;
+          return firstResultUrl.query.q;
+        } catch (e) {
+          return queryUri;
+        }
+      // Anything else is an error
+      } else throw res;
     });
 }
 
-let csvOut = csvWriteStream({
-  headers: ['name', 'address', 'phone', 'website']
-});
-csvOut.pipe(process.stdout);
-
-function outputPlaceRow(placeRow) {
-  csvOut.write(placeRow);
+function getFirstMatchingAddressComponent(result, name) {
+  return result.address_components.find(
+    component => component.types.includes(name));
+}
+function getLongName(result, name) {
+  return getFirstMatchingAddressComponent(result, name).long_name;
+}
+function getShortName(result, name) {
+  return getFirstMatchingAddressComponent(result, name).short_name;
 }
 
-function outputRowFromFirstResult(response) {
-  let best = response.results[0];
-  return outputPlaceRow({
-    name: best.name,
-    address: best.formatted_address,
-    phone: best.formatted_phone_number,
-    website: best.website
+// we'd use this if fetching details weren't an extra step -
+// since they are, we use a clumsier approach for matching US states
+function getFirstResultInAAL1(results, areaName) {
+  return results.find(result =>
+    getShortName(result, 'administrative_area_level_1') == areaName);
+}
+
+function getFirstResultInUSState(results, usState) {
+  return results.find(result => {
+    let fields = result.formatted_address.split(/,\s*/);
+    let n = fields.length;
+    return (fields[n-1] == 'United States' &&
+      fields[n-2].slice(0,2) == usState);
   });
 }
 
-function cacheAndOutputResponse(placeName, response) {
-  placeCache.put('textsearch ' + placeName, response);
-  outputRowFromFirstResult(response);
+function cacheBackedQuery(name, query) {
+  let prefix = name + ' ';
+  return (key) => {
+    return placeCache.get(prefix + key)
+      .catch(err => {
+        if (err.notFound) {
+          return query(key).then((result) => {
+            placeCache.put(prefix + key, result);
+            return result;
+          });
+        } else {
+          throw err;
+        }
+      });
+  };
 }
 
-function queryPlaceData(placeName) {
-  function placeTextSearchUrl(placeName) {
-    return 'https://maps.googleapis.com/maps/api/place/textsearch/json?' +
+function getPlaceTextSearchResults(placeName) {
+  return request(
+    'https://maps.googleapis.com/maps/api/place/textsearch/json?' +
       querystring.stringify({
         query: placeName,
         key: apiKey
+      }));
+}
+
+function getPlaceDetails(placeid) {
+  return request(
+    'https://maps.googleapis.com/maps/api/place/details/json?' +
+      querystring.stringify({
+        placeid: placeid,
+        key: apiKey
+      }));
+}
+
+let placeTextSearch = cacheBackedQuery('textsearch',
+  getPlaceTextSearchResults);
+
+let placeDetails = cacheBackedQuery(
+  'details', getPlaceDetails);
+
+let workbook = xlsx.readFile('spreadsheet.xlsx');
+let spreadsheet = workbook.Sheets[workbook.SheetNames[0]];
+
+let lastRow = parseInt(/\d+$/.exec(spreadsheet['!ref'])[0], 10);
+
+let fieldColumns = {
+  name: 'B',
+  usState: 'E',
+  streetAddress: 'C',
+  city: 'D',
+  postalCode: 'F',
+  phone: 'G',
+  notClosed: 'H',
+  website: 'I',
+  latLon: 'J'
+};
+
+function processRow(rowNumber) {
+  function updateCell(field, value) {
+    spreadsheet[fieldColumns[field] + rowNumber].v = value;
+  }
+  let placeName = spreadsheet[fieldColumns.name + rowNumber].v;
+  let placeUSState = spreadsheet[fieldColumns.usState + rowNumber].v;
+  function updateWithPlaceDetails(placeId) {
+    return placeDetails(placeId).then(x => JSON.parse(x))
+      .then(response => {
+        if (response.status == 'OK') {
+          let result = response.result;
+          updateCell('city', getLongName(result, 'locality'));
+          updateCell('usState',
+            getShortName(result, 'administrative_area_level_1'));
+          updateCell('postalCode', getLongName(result, 'postal_code'));
+          let streetNumber = getLongName(result, 'street_number');
+          let route = getLongName(result, 'route');
+          let streetAddress = streetNumber ?
+            streetNumber + ' ' + route : route;
+          updateCell('streetAddress', streetAddress);
+          updateCell('phone', result.formatted_phone_number);
+          updateCell('website', result.website);
+          let loc = result.geometry.location;
+          updateCell('latLon', loc.lat + ', ' + loc.lng);
+          updateCell('notClosed', result.permanently_closed ? 'N' : 'Y');
+        } else if (response.status == 'ZERO_RESULTS') {
+          console.log('W ['+ rowNumber +']: Zero results on detail');
+          updateCell('notClosed', 'N');
+        }
       });
   }
-  return request({uri: placeTextSearchUrl(placeName), json:true})
+  function updateWithFirstGoogleResult() {
+    return getFirstGoogleResult(placeName).then(url => {
+      updateCell('website', url);
+    });
+  }
+  return placeTextSearch(placeName).then(x => JSON.parse(x))
     .then(response => {
-
-    // TODO: take string, do caching magic, THEN parse JSON and logic
-
-    if (response.status == 'OK') {
-      cacheAndOutputResponse(placeName, response);
-    } else if (response.status == 'ZERO_RESULTS') {
-      return getFirstGoogleResult(placeName).then(url => {
-        return outputPlaceRow({
-          name: placeName,
-          website: url
-        });
-      });
-    } else throw response;
-  });
+      if (response.status == 'OK') {
+        let mostLikelyResult = getFirstResultInUSState(
+          response.results, placeUSState);
+        if (!mostLikelyResult) mostLikelyResult = response.results[0];
+        return updateWithPlaceDetails(mostLikelyResult.place_id);
+      } else if (response.status == 'ZERO_RESULTS') {
+        return updateWithFirstGoogleResult();
+      } else throw response;
+    }).then(() => {
+      console.log('I ['+ rowNumber +']: Complete');
+    }).catch(err => {
+      console.log('E ['+ rowNumber +']: '+JSON.stringify(err));
+    });
 }
 
-function processPlaceName(placeName) {
-  return placeCache.get(placeName).then(outputRowFromFirstResult)
-  .catch(err => {
-    if (err.notFound) {
-      queryPlaceData(placeName);
-    } else {
-      throw err;
-    }
-  });
+let rowPromises = [];
+
+for (let i = 1; i <= lastRow; i++) {
+  rowPromises.push(processRow(i));
 }
 
-let inlines = readline.createInterface({
-  input: process.stdin
+Promise.all(rowPromises).then(()=>{
+  xlsx.writeFile(workbook, 'updated.xlsx');
 });
-inlines.on('line', processPlaceName);

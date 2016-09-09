@@ -21,10 +21,14 @@
   },
   "homepage": "https://github.com/stuartpb/leadsheet#readme",
   "dependencies": {
-    "csv-write-stream": "^2.0.0",
+    "array-includes": "^3.0.2",
+    "bottleneck": "^1.12.0",
+    "cheerio": "^0.22.0",
+    "es6-shim": "^0.35.1",
     "level": "^1.4.0",
     "request": "^2.74.0",
     "request-promise-native": "^1.0.3",
-    "then-levelup": "^1.0.1"
+    "then-levelup": "^1.0.1",
+    "xlsx": "^0.8.0"
   }
 }
