@@ -41,7 +41,7 @@ function getFirstGoogleResult(placeName) {
           // A more verbose selector might be '#search #ires h3.r > a'
           let firstResultUrl =
             urllib.parse(cheerio('#ires a', res.body).attr('href'));
-          if (firstResultUrl.path != '/url') throw firstResultUrl;
+          if (firstResultUrl.pathname != '/url') throw firstResultUrl;
           return firstResultUrl.query.q;
         } catch (e) {
           return queryUri;
