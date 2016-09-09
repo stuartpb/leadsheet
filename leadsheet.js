@@ -9,6 +9,7 @@ let levelUp = require('level');
 let thenLevel = require('then-levelup');
 let xlsx = require('xlsx');
 let cheerio = require('cheerio');
+let Bottleneck = require('bottleneck');
 
 function level() {
   let db = levelUp.apply(levelUp, arguments);
@@ -19,6 +20,7 @@ function level() {
 
 let apiKey = process.env.GOOGLE_API_KEY;
 let placeCache = level('./placecache');
+let limiter = new Bottleneck(100);
 
 function getFirstGoogleResult(placeName) {
   let queryUri = 'https://www.google.com/search?btnI&q=' +
@@ -51,7 +53,11 @@ function getFirstGoogleResult(placeName) {
 
 function getFirstMatchingAddressComponent(result, name) {
   return result.address_components.find(
-    component => component.types.includes(name));
+    component => component.types.includes(name)) || {
+      // hack to make handling absences slightly simpler
+      long_name: '',
+      short_name: ''
+    };
 }
 function getLongName(result, name) {
   return getFirstMatchingAddressComponent(result, name).long_name;
@@ -82,7 +88,7 @@ function cacheBackedQuery(name, query) {
     return placeCache.get(prefix + key)
       .catch(err => {
         if (err.notFound) {
-          return query(key).then((result) => {
+          return limiter.schedule(query, key).then((result) => {
             placeCache.put(prefix + key, result);
             return result;
           });
@@ -136,7 +142,7 @@ let fieldColumns = {
 
 function processRow(rowNumber) {
   function updateCell(field, value) {
-    spreadsheet[fieldColumns[field] + rowNumber].v = value;
+    spreadsheet[fieldColumns[field] + rowNumber] = {v: value};
   }
   let placeName = spreadsheet[fieldColumns.name + rowNumber].v;
   let placeUSState = spreadsheet[fieldColumns.usState + rowNumber].v;
@@ -183,7 +189,13 @@ function processRow(rowNumber) {
     }).then(() => {
       console.log('I ['+ rowNumber +']: Complete');
     }).catch(err => {
-      console.log('E ['+ rowNumber +']: '+JSON.stringify(err));
+      let prefix = 'E ['+ rowNumber +']: ';
+      if (err instanceof Error) {
+        console.log(prefix + err.message);
+        console.log(prefix + err.stack.replace(/\n/g,'\n'+prefix));
+      } else {
+        console.log(prefix + JSON.stringify(err));
+      }
     });
 }
 
