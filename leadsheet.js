@@ -67,18 +67,18 @@ function getShortName(result, name) {
 }
 
 // we'd use this if fetching details weren't an extra step -
-// since they are, we use a clumsier approach for matching US states
+// since they are, we use a clumsier approach against the address
 function getFirstResultInAAL1(results, areaName) {
   return results.find(result =>
     getShortName(result, 'administrative_area_level_1') == areaName);
 }
 
-function getFirstResultInUSState(results, usState) {
+// TODO: maybe check country, too
+function getFirstResultWithPenultimateAddressPrefix(results, prefix) {
   return results.find(result => {
     let fields = result.formatted_address.split(/,\s*/);
     let n = fields.length;
-    return (fields[n-1] == 'United States' &&
-      fields[n-2].slice(0,2) == usState);
+    return (fields[n-2].slice(0,prefix.length) == prefix);
   });
 }
 
@@ -179,7 +179,7 @@ function processRow(rowNumber) {
   return placeTextSearch(placeName).then(x => JSON.parse(x))
     .then(response => {
       if (response.status == 'OK') {
-        let mostLikelyResult = getFirstResultInUSState(
+        let mostLikelyResult = getFirstResultWithPenultimateAddressPrefix(
           response.results, placeUSState);
         if (!mostLikelyResult) mostLikelyResult = response.results[0];
         return updateWithPlaceDetails(mostLikelyResult.place_id);
