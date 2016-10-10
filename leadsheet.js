@@ -31,6 +31,8 @@ if (!inputFilename) {
   console.error('No input filename specified');
   process.exit(1);
 }
+let outputFilename = argv._[1] ||
+  inputFilename.replace(/([^.]+)\./,'$1_updated.');
 let placeCache = level('./placecache');
 let limiter = new Bottleneck(100);
 
@@ -218,5 +220,6 @@ for (let i = 1; i <= lastRow; i++) {
 }
 
 Promise.all(rowPromises).then(()=>{
-  xlsx.writeFile(workbook, 'updated.xlsx');
+  console.log('I: All rows read, writing to '+outputFilename);
+  xlsx.writeFile(workbook, outputFilename);
 });
