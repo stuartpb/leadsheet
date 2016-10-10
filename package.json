@@ -26,6 +26,7 @@
     "cheerio": "^0.22.0",
     "es6-shim": "^0.35.1",
     "level": "^1.4.0",
+    "minimist": "^1.2.0",
     "request": "^2.74.0",
     "request-promise-native": "^1.0.3",
     "then-levelup": "^1.0.1",

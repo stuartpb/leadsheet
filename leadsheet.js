@@ -10,6 +10,9 @@ let thenLevel = require('then-levelup');
 let xlsx = require('xlsx');
 let cheerio = require('cheerio');
 let Bottleneck = require('bottleneck');
+let argv = require('minimist')(process.argv.slice(2), {
+  string: ['key', 'k']
+});
 
 function level() {
   let db = levelUp.apply(levelUp, arguments);
@@ -18,7 +21,16 @@ function level() {
   return thenLevel(db);
 }
 
-let apiKey = process.env.GOOGLE_API_KEY;
+let apiKey = argv.key || argv.k || process.env.GOOGLE_API_KEY;
+if (!apiKey) {
+  console.error('No Google API key defined');
+  process.exit(1);
+}
+let inputFilename = argv._[0];
+if (!inputFilename) {
+  console.error('No input filename specified');
+  process.exit(1);
+}
 let placeCache = level('./placecache');
 let limiter = new Bottleneck(100);
 
@@ -123,7 +135,7 @@ let placeTextSearch = cacheBackedQuery('textsearch',
 let placeDetails = cacheBackedQuery(
   'details', getPlaceDetails);
 
-let workbook = xlsx.readFile('spreadsheet.xlsx');
+let workbook = xlsx.readFile(inputFilename);
 let spreadsheet = workbook.Sheets[workbook.SheetNames[0]];
 
 let lastRow = parseInt(/\d+$/.exec(spreadsheet['!ref'])[0], 10);
