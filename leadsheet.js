@@ -195,7 +195,8 @@ function processRow(rowNumber) {
       if (response.status == 'OK') {
         let mostLikelyResult = getFirstResultWithPenultimateAddressPrefix(
           response.results, placeUSState);
-        if (!mostLikelyResult) mostLikelyResult = response.results[0];
+        // if no matching results, treat like zero results
+        if (!mostLikelyResult) return updateWithFirstGoogleResult();
         return updateWithPlaceDetails(mostLikelyResult.place_id);
       } else if (response.status == 'ZERO_RESULTS') {
         return updateWithFirstGoogleResult();
