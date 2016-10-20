@@ -33,6 +33,9 @@ if (!inputFilename) {
 }
 let outputFilename = argv._[1] ||
   inputFilename.replace(/([^.]+)\./,'$1_updated.');
+
+let startingRow = argv.s || 1;
+
 let placeCache = level('./placecache');
 let limiter = new Bottleneck(100);
 
@@ -230,7 +233,7 @@ function processRow(rowNumber) {
 
 let rowPromises = [];
 
-for (let i = 1; i <= lastRow; i++) {
+for (let i = startingRow; i <= lastRow; i++) {
   rowPromises.push(processRow(i));
 }
 
