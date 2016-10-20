@@ -140,8 +140,6 @@ let placeDetails = cacheBackedQuery(
 let workbook = xlsx.readFile(inputFilename);
 let spreadsheet = workbook.Sheets[workbook.SheetNames[0]];
 
-let lastRow = parseInt(/\d+$/.exec(spreadsheet['!ref'])[0], 10);
-
 let fieldColumns = {
   name: 'B',
   usState: 'E',
@@ -153,6 +151,22 @@ let fieldColumns = {
   website: 'I',
   latLon: 'J'
 };
+
+// Arguably this should be determined from the data above,
+// but really, arguably this should be determined dynamically using headings,
+// in which case this last-column check would be a moot point anyway
+let minLastColumn = 'J';
+
+let lastCellRegex = /([A-Z]+)(\d+)$/;
+let [, lastColumn, lastRow] = lastCellRegex.exec(spreadsheet['!ref']);
+
+lastRow = parseInt(lastRow, 10);
+
+// increase stated range if adding more columns than are already present
+if (xlsx.utils.decode_col(lastColumn) < xlsx.utils.decode_col(minLastColumn)) {
+  spreadsheet['!ref'] =
+    spreadsheet['!ref'].replace(lastCellRegex, minLastColumn + '$2');
+}
 
 function processRow(rowNumber) {
   function updateCell(field, value) {
