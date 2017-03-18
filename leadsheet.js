@@ -14,11 +14,8 @@ let argv = require('minimist')(process.argv.slice(2), {
   string: ['key', 'k']
 });
 
-function level() {
-  let db = levelUp.apply(levelUp, arguments);
-  // awful hack for https://github.com/then/then-levelup/issues/3
-  db.createWriteStream = {bind: () => {}};
-  return thenLevel(db);
+function level(...args) {
+  return thenLevel(levelUp(...args));
 }
 
 let apiKey = argv.key || argv.k || process.env.GOOGLE_API_KEY;
