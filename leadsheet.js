@@ -11,7 +11,10 @@ let xlsx = require('xlsx');
 let cheerio = require('cheerio');
 let Bottleneck = require('bottleneck');
 let argv = require('minimist')(process.argv.slice(2), {
-  string: ['key', 'k']
+  string: ['key', 'k'],
+  // this is basically only useful if you're mocking the API
+  // to produce more details than it actually provides - see below
+  boolean: ['total-information-technology']
 });
 
 function level(...args) {
@@ -94,6 +97,12 @@ function getFirstResultWithPenultimateAddressPrefix(results, prefix) {
     let n = fields.length;
     return (fields[n-2].slice(0,prefix.length) == prefix);
   });
+}
+
+let aal1InResults = argv['total-information-technology'];
+function getFirstResultInUsState(results, state) {
+  return aal1InResults ? getFirstResultInAAL1(results, state)
+    : getFirstResultWithPenultimateAddressPrefix(results, state);
 }
 
 function cacheBackedQuery(name, query) {
@@ -207,8 +216,8 @@ function processRow(rowNumber) {
   return placeTextSearch(placeName).then(x => JSON.parse(x))
     .then(response => {
       if (response.status == 'OK') {
-        let mostLikelyResult = getFirstResultWithPenultimateAddressPrefix(
-          response.results, placeUSState);
+        let mostLikelyResult =
+          getFirstResultInUsState(response.results, placeUSState);
         // if no matching results, treat like zero results
         if (!mostLikelyResult) return updateWithFirstGoogleResult();
         return updateWithPlaceDetails(mostLikelyResult.place_id);
